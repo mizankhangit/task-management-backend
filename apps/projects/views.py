@@ -1,3 +1,7 @@
+from apps.projects.serializers import ProjectInvitationSerializer
+from apps.projects.services import create_project_invitation
+from apps.projects.serializers import CreateProjectInvitationSerializer
+from django.db import transaction
 from django.db.models import Count, Q
 from rest_framework import status as http_status, viewsets
 from rest_framework.decorators import action
@@ -37,7 +41,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 CanViewProject
             ]
 
-        elif self.action == "members":
+        elif self.action in ["members", "create_invitation"]:
             permission_classes = [
                 CanManageMembers
             ]
@@ -332,17 +336,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
-        membership.delete()
+            membership.delete()
         return Response(
             {"detail": "You have successfully left the project."},
             status=http_status.HTTP_200_OK,
         )
 
-    @action(
-        detail=True,
-        methods=["post"],
-        url_path="transfer-ownership",
-    )
+    @action(detail=True, methods=["post"], url_path="transfer-ownership")
     def transfer_ownership(self, request, pk=None):
         project = self.get_object()
         user = request.user
@@ -394,6 +394,52 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return Response(
             {"detail": f"Ownership successfully transferred to {new_owner.username}."},
             status=http_status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="invitations",
+    )
+    def create_invitation(self, request, pk=None):
+        project = self.get_object()
+
+        if not user_has_permission(
+            project,
+            request.user,
+            ProjectPermission.MANAGE_MEMBERS,
+        ):
+            return Response(
+                {"detail": "You do not have permission to invite members."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = CreateProjectInvitationSerializer(
+            data=request.data,
+            context={"project": project},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        invitation = create_project_invitation(
+            project=project,
+            email=serializer.validated_data["email"],
+            role=serializer.validated_data["role"],
+            invited_by=request.user,
+        )
+
+        try:
+            from apps.projects.tasks import send_project_invitation_email_task
+            transaction.on_commit(
+                lambda: send_project_invitation_email_task.delay(invitation.id)
+            )
+        except Exception:
+            # Fallback gracefully if Celery broker or email sending encounters an issue in development
+            pass
+
+        response_serializer = ProjectInvitationSerializer(invitation)
+        return Response(
+            response_serializer.data,
+            status=http_status.HTTP_201_CREATED,
         )
 
 

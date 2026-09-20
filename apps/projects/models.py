@@ -71,3 +71,76 @@ class ProjectMembership(models.Model):
             f"{self.project.name} - "
             f"{self.role}"
         )
+
+class ProjectInvitation(models.Model):
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REVOKED = "revoked", "Revoked"
+
+    project = models.ForeignKey(
+        "Project",
+        on_delete=models.CASCADE,
+        related_name="invitations",
+    )
+
+    email = models.EmailField()
+
+    role = models.CharField(
+        max_length=20,
+        choices=ProjectMembership.Role.choices,
+        default=ProjectMembership.Role.MEMBER,
+    )
+
+    token = models.CharField(
+        max_length=128,
+        unique=True,
+    )
+
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="sent_project_invitations",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    expires_at = models.DateTimeField()
+
+    accepted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    email_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    email_send_attempts = models.PositiveIntegerField(
+        default=0,
+    )
+
+    email_last_error = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"{self.email} → "
+            f"{self.project.name}"
+        )

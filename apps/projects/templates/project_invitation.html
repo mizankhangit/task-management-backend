@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Project Invitation</title>
+</head>
+
+<body>
+  <h1>You're invited!</h1>
+
+  <p>
+    {{ invited_by }} invited you to join
+    <strong>{{ project.name }}</strong>.
+  </p>
+
+  <p>
+    Your role will be:
+    <strong>{{ role }}</strong>
+  </p>
+
+  <p>
+    Click the button below to accept the invitation.
+  </p>
+
+  <p>
+    <a href="{{ invitation_url }}">
+      Accept Invitation
+    </a>
+  </p>
+
+  <p>
+    This invitation expires on
+    {{ expires_at }}.
+  </p>
+</body>
+
+</html>

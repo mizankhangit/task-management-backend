@@ -1,7 +1,12 @@
 from rest_framework import serializers
 
-from .models import Project, ProjectMembership
+from .models import (
+    Project,
+    ProjectMembership,
+    ProjectInvitation,
+)
 
+from django.utils import timezone
 
 class ProjectMembershipSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(
@@ -123,3 +128,91 @@ class ProjectSerializer(serializers.ModelSerializer):
             "can_change_roles": user_has_permission(obj, user, ProjectPermission.CHANGE_ROLES),
             "can_delete_project": user_has_permission(obj, user, ProjectPermission.DELETE_PROJECT),
         }
+
+class ProjectInvitationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectInvitation
+        fields = [
+            "id",
+            "email",
+            "role",
+            "status",
+            "expires_at",
+            "created_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "status",
+            "expires_at",
+            "created_at",
+        ]
+
+class CreateProjectInvitationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    role = serializers.ChoiceField(
+        choices=[
+            ProjectMembership.Role.ADMIN,
+            ProjectMembership.Role.MEMBER,
+            ProjectMembership.Role.VIEWER,
+        ]
+    )
+
+    def validate(self, attrs):
+        project = self.context["project"]
+
+        email = (
+            attrs["email"]
+            .strip()
+            .lower()
+        )
+
+        already_member = (
+            ProjectMembership.objects
+            .filter(
+                project=project,
+                user__email__iexact=email,
+            )
+            .exists()
+        )
+
+        if already_member:
+            raise serializers.ValidationError({
+                "email": (
+                    "This user is already "
+                    "a project member."
+                )
+            })
+
+        pending_invitation = (
+            ProjectInvitation.objects
+            .filter(
+                project=project,
+                email__iexact=email,
+                status=(
+                    ProjectInvitation.Status.PENDING
+                ),
+                expires_at__gt=timezone.now(),
+            )
+            .exists()
+        )
+
+        if pending_invitation:
+            raise serializers.ValidationError({
+                "email": (
+                    "An invitation to this user "
+                    "is already pending."
+                )
+            })
+
+        return attrs
+        
+class AcceptInvitationSerializer(
+    serializers.Serializer
+):
+    token = serializers.CharField(
+        min_length=20,
+        max_length=128,
+    )
+        
