@@ -28,7 +28,7 @@ SECRET_KEY = 'django-insecure-5awaff_%b&yx^)(9ec34jbt04uq+9$38w+(@47#%(^@-fo5l0h
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -39,6 +39,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -51,11 +52,13 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "rest_framework_simplejwt",
+    "channels",
 
     "apps.core",
     "apps.users",
     "apps.projects",
     "apps.tasks",
+    "apps.notifications",
     "apps.comments",
 ]
 
@@ -111,7 +114,23 @@ TEMPLATES = [
     },
 ]
 
+ASGI_APPLICATION = "config.asgi.application"
+
 WSGI_APPLICATION = 'config.wsgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": (
+            "channels_redis.core."
+            "RedisChannelLayer"
+        ),
+        "CONFIG": {
+            "hosts": [
+                ("redis", 6379),
+            ],
+        },
+    },
+}
 
 
 # Database

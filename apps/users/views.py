@@ -26,6 +26,7 @@ class UserSearchSerializer(serializers.ModelSerializer):
 class UserSearchView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserSearchSerializer
+    pagination_class = None
 
     def get_queryset(self):
         query = self.request.query_params.get("search", "").strip()

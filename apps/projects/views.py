@@ -199,7 +199,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
             )
             payload["project"] = project.id
 
-            serializer = TaskSerializer(data=payload)
+            serializer = TaskSerializer(
+                data=payload,
+                context={"request": request},
+            )
             serializer.is_valid(raise_exception=True)
             serializer.save(project=project)
             return Response(
@@ -307,7 +310,18 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 context={"request": request},
             )
             serializer.is_valid(raise_exception=True)
-            serializer.save(project=project)
+            membership = serializer.save(project=project)
+
+            try:
+                from apps.notifications.services import notify_member_added
+                notify_member_added(
+                    project=project,
+                    user=membership.user,
+                    actor=request.user,
+                    role=membership.role,
+                )
+            except Exception:
+                pass
 
             return Response(
                 serializer.data,
@@ -428,6 +442,17 @@ class ProjectViewSet(viewsets.ModelViewSet):
         )
 
         try:
+            from apps.notifications.services import notify_project_invitation
+            notify_project_invitation(
+                project=project,
+                email=serializer.validated_data["email"],
+                role=serializer.validated_data["role"],
+                invited_by=request.user,
+            )
+        except Exception:
+            pass
+
+        try:
             from apps.projects.tasks import send_project_invitation_email_task
             transaction.on_commit(
                 lambda: send_project_invitation_email_task.delay(invitation.id)
@@ -489,7 +514,17 @@ class ProjectMembershipViewSet(viewsets.ModelViewSet):
         if not user_has_permission(project, user, ProjectPermission.MANAGE_MEMBERS):
             raise PermissionDenied("You do not have permission to add members to this project.")
 
-        serializer.save()
+        membership = serializer.save()
+        try:
+            from apps.notifications.services import notify_member_added
+            notify_member_added(
+                project=project,
+                user=membership.user,
+                actor=user,
+                role=membership.role,
+            )
+        except Exception:
+            pass
 
     def perform_update(self, serializer):
         instance = serializer.instance

@@ -1,3 +1,4 @@
+daphne
 Django
 djangorestframework
 djangorestframework-simplejwt
@@ -7,3 +8,8 @@ python-decouple
 django-filter
 celery
 redis
+channels
+channels-redis
+pytest
+pytest-django
+factory-boy

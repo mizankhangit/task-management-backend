@@ -48,6 +48,8 @@ class Task(models.Model):
         blank=True,
     )
 
+    version = models.IntegerField(default=1)
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )

@@ -3,6 +3,15 @@ from django.utils import timezone
 
 from apps.tasks.models import Task, TaskActivity
 
+class TaskConflictError(Exception):
+    def __init__(
+        self,
+        current_version,
+    ):
+        self.current_version = (
+            current_version
+        )
+
 @transaction.atomic
 def change_task_status(*, task, new_status, user):
     old_status = task.status
@@ -33,6 +42,9 @@ def change_task_status(*, task, new_status, user):
         old_value=old_status,
         new_value=new_status,
     )
+
+    from apps.notifications.services import notify_task_status_changed
+    notify_task_status_changed(task=task, new_status=new_status, actor=user)
 
     return task
 
@@ -163,5 +175,36 @@ def restore_task(*, task, user):
         old_value=True,
         new_value=False,
     )
+
+    return task
+
+@transaction.atomic
+def update_task_with_version(
+    *,
+    task_id,
+    data,
+    expected_version,
+):
+    task = (
+        Task.objects
+        .select_for_update()
+        .get(id=task_id)
+    )
+
+    if task.version != expected_version:
+        raise TaskConflictError(
+            task.version
+        )
+
+    for field, value in data.items():
+        setattr(
+            task,
+            field,
+            value,
+        )
+
+    task.version += 1
+
+    task.save()
 
     return task

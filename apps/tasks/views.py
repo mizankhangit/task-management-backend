@@ -1,3 +1,4 @@
+from django.db import transaction
 from apps.tasks.serializers import TaskActivitySerializer
 from django.db.models import Count, Q
 from rest_framework import filters, viewsets
@@ -24,7 +25,7 @@ from .permissions import (
 from .models import Task, TaskActivity
 from .serializers import TaskSerializer
 from .filters import TaskFilter
-from .services import soft_delete_task, restore_task
+from .services import soft_delete_task, restore_task, update_task_with_version, TaskConflictError
 
 class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
@@ -131,7 +132,14 @@ class TaskViewSet(viewsets.ModelViewSet):
                 "You do not have permission to create tasks in this project."
             )
 
-        serializer.save()
+        task = serializer.save()
+
+        try:
+            from .realtime import publish_task_event
+            from .events import TaskEventType
+            publish_task_event(task=task, event_type=TaskEventType.CREATED)
+        except Exception:
+            pass
 
     def perform_update(self, serializer):
         task = serializer.instance
@@ -156,7 +164,70 @@ class TaskViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         task = self.get_object()
         soft_delete_task(task=task, user=request.user)
+
+        try:
+            from .realtime import publish_task_event
+            from .events import TaskEventType
+            publish_task_event(task=task, event_type=TaskEventType.DELETED)
+        except Exception:
+            pass
+
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        task = self.get_object()
+        user = request.user
+
+        if not user_has_permission(task.project, user, ProjectPermission.EDIT_TASK):
+            raise PermissionDenied(
+                "You do not have permission to edit tasks in this project."
+            )
+
+        expected_version = request.data.get("version")
+        if expected_version is not None and task.version != expected_version:
+            return Response(
+                {
+                    "detail": "This task was modified by another user.",
+                    "code": "task_conflict",
+                    "current_version": task.version,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = self.get_serializer(
+            task,
+            data=request.data,
+            partial=kwargs.get("partial", True),
+        )
+        serializer.is_valid(raise_exception=True)
+
+        if "assignee" in serializer.validated_data:
+            new_assignee = serializer.validated_data["assignee"]
+            if new_assignee != task.assignee and not user_has_permission(
+                task.project, user, ProjectPermission.ASSIGN_TASK
+            ):
+                raise PermissionDenied(
+                    "You do not have permission to assign tasks in this project."
+                )
+
+        updated_task = serializer.save()
+        updated_task.version += 1
+        updated_task.save(update_fields=["version"])
+
+        try:
+            from .realtime import publish_task_event
+            from .events import TaskEventType
+            event_type = (
+                TaskEventType.STATUS_CHANGED
+                if "status" in serializer.validated_data
+                else TaskEventType.UPDATED
+            )
+            publish_task_event(task=updated_task, event_type=event_type)
+        except Exception:
+            pass
+
+        return Response(self.get_serializer(updated_task).data)
 
     @action(
         detail=False,
@@ -239,6 +310,13 @@ class TaskViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You do not have permission to restore tasks in this project.")
 
         task = restore_task(task=task, user=request.user)
+
+        try:
+            from .realtime import publish_task_event
+            from .events import TaskEventType
+            publish_task_event(task=task, event_type=TaskEventType.CREATED)
+        except Exception:
+            pass
 
         return Response(
             TaskSerializer(task).data

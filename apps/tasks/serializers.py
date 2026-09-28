@@ -59,6 +59,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "is_deleted",
             "deleted_at",
             "deleted_by",
+            "version",
             "created_at",
             "updated_at",
         ]
@@ -187,6 +188,10 @@ class TaskSerializer(serializers.ModelSerializer):
             new_value=task.title,
         )
 
+        if task.assignee:
+            from apps.notifications.services import notify_task_assigned
+            notify_task_assigned(task=task, actor=user)
+
         return task
 
     def update(self, instance, validated_data):
@@ -196,6 +201,8 @@ class TaskSerializer(serializers.ModelSerializer):
             if request and hasattr(request, "user") and request.user.is_authenticated
             else None
         )
+
+        old_assignee_id = instance.assignee_id
 
         from .services import (
             change_task_due_date,
@@ -235,6 +242,10 @@ class TaskSerializer(serializers.ModelSerializer):
 
         if validated_data:
             instance.save()
+
+        if instance.assignee_id and instance.assignee_id != old_assignee_id:
+            from apps.notifications.services import notify_task_assigned
+            notify_task_assigned(task=instance, actor=user)
 
         return instance
 

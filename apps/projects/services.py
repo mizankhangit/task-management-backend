@@ -105,4 +105,15 @@ def accept_project_invitation(*,token, user):
         ]
     )
 
+    try:
+        from apps.notifications.services import notify_member_added
+        notify_member_added(
+            project=invitation.project,
+            user=user,
+            actor=invitation.invited_by,
+            role=invitation.role,
+        )
+    except Exception:
+        pass
+
     return membership
