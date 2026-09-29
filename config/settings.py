@@ -49,12 +49,13 @@ INSTALLED_APPS = [
     "django_filters",
 
     # Third-party apps
+    "drf_spectacular",
     "rest_framework",
     "corsheaders",
     "rest_framework_simplejwt",
     "channels",
 
-    "apps.core",
+    "apps.core",    
     "apps.users",
     "apps.projects",
     "apps.tasks",
@@ -78,6 +79,28 @@ REST_FRAMEWORK = {
         "rest_framework.pagination.PageNumberPagination"
     ),
     "PAGE_SIZE": 10,
+    "DEFAULT_SCHEMA_CLASS": (
+        "drf_spectacular.openapi."
+        "AutoSchema"
+    ),
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Task Manager API",
+    "DESCRIPTION": (
+        "Production-grade task management API."
+    ),
+    "VERSION": "1.0.0",
+
+    "SERVE_INCLUDE_SCHEMA": False,
+
+    "SECURITY": [
+        {
+            "bearerAuth": [],
+        }
+    ],
+
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 SIMPLE_JWT = {
@@ -95,6 +118,10 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    "apps.core.middleware.RequestIDMiddleware",
+    "apps.core.middleware.JWTAuthMiddleware",
+
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -145,6 +172,23 @@ DATABASES = {
         "HOST": os.environ.get("POSTGRES_HOST"),
         "PORT": os.environ.get("POSTGRES_PORT"),
     }
+}
+
+CACHES = {
+    "default": {
+        "BACKEND": (
+            "django_redis.cache.RedisCache"
+        ),
+        "LOCATION": (
+            "redis://redis:6379/2"
+        ),
+        "OPTIONS": {
+            "CLIENT_CLASS": (
+                "django_redis.client."
+                "DefaultClient"
+            ),
+        },
+    },
 }
 
 
